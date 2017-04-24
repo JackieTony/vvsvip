@@ -1,6 +1,6 @@
-package com.ccsvip.common.util;
+package com.vvsvip.common.util;
 
-import com.ccsvip.common.bean.FastdfsBean;
+import com.vvsvip.common.bean.FastdfsBean;
 import org.csource.common.FastDFSException;
 import org.csource.common.NameValuePair;
 import org.csource.fastdfs.*;

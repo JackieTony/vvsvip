@@ -5,7 +5,7 @@
 
     <settings>
         <!-- 全局映射器启用缓存 -->
-        <setting name="cacheEnabled" value="true"/>
+        <setting name="cacheEnabled" value="false"/>
         <!-- 查询时，关闭关联对象即时加载以提高性能 -->
         <setting name="lazyLoadingEnabled" value="true"/>
         <!-- 设置关联对象加载的形态，此处为按需加载字段(加载字段由SQL指定)，不会加载关联表的所有字段，以提高性能 -->

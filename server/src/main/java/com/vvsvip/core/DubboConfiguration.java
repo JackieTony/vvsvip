@@ -12,9 +12,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
 
-@Configuration
-@ConditionalOnClass(Exporter.class)
-@PropertySource(value = "classpath:/dubbo.properties")
+//@Configuration
+//@ConditionalOnClass(Exporter.class)
+//@PropertySource(value = "classpath:/dubbo.properties")
 public class DubboConfiguration {
 
     @Value("${dubbo.application.name}")

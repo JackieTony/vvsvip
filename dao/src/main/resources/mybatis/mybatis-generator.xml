@@ -3,8 +3,7 @@
         "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd" >
 <generatorConfiguration>
     <!-- 引入配置文件 -->
-    <properties url="file:///Users/rocher/workspace/IDEA/DubboDemo/src/main/resources/mybatis/generate.properties"/>
-
+    <properties resource="mybatis/generate.properties"/>
     <!-- 指定数据连接驱动jar地址 -->
     <!--<classPathEntry location="${classPath}"/>-->
 
@@ -12,14 +11,14 @@
     <context id="infoGuardian">
         <!-- 注释 -->
         <commentGenerator>
-            <property name="suppressAllComments" value="false"/><!-- 是否取消注释 -->
-            <property name="suppressDate" value="true"/> <!-- 是否生成注释代时间戳-->
-        </commentGenerator>
+            <property name="suppressAllComments" value="true"/><!-- 是否取消注释 -->
+        <property name="suppressDate" value="true"/> <!-- 是否生成注释代时间戳-->
+    </commentGenerator>
 
-        <!-- jdbc连接 -->
-        <jdbcConnection driverClass="${jdbc_driver}"
-                        connectionURL="${jdbc_url}" userId="${jdbc_user}"
-                        password="${jdbc_password}"/>
+    <!-- jdbc连接 -->
+    <jdbcConnection driverClass="${jdbc_driver}"
+                    connectionURL="${jdbc_url}" userId="${jdbc_user}"
+                    password="${jdbc_password}"/>
 
         <!-- 类型转换 -->
         <javaTypeResolver>
@@ -28,7 +27,7 @@
         </javaTypeResolver>
 
         <!-- 生成实体类地址 -->
-        <javaModelGenerator targetPackage="com.vvsvip.shop.core.model"
+        <javaModelGenerator targetPackage="com.vvsvip.core.model"
                             targetProject="${project}">
             <!-- 是否在当前路径下新加一层schema,eg：fase路径org.byevex.dao， true:org.byevex.dao.[schemaName] -->
             <property name="enableSubPackages" value="false"/>
@@ -37,14 +36,14 @@
         </javaModelGenerator>
 
         <!-- 生成mapxml文件 -->
-        <sqlMapGenerator targetPackage="com.vvsvip.shop.core.dao.mapper"
+        <sqlMapGenerator targetPackage="com.vvsvip.core.dao.mapper"
                          targetProject="${project}">
             <!-- 是否在当前路径下新加一层schema,eg：fase路径org.byevex.dao.mapper， true:org.byevex.dao.mapper.[schemaName] -->
             <property name="enableSubPackages" value="false"/>
         </sqlMapGenerator>
 
         <!-- 生成mapxml对应client，也就是接口dao -->
-        <javaClientGenerator targetPackage="com.vvsvip.shop.core.dao"
+        <javaClientGenerator targetPackage="com.vvsvip.core.dao"
                              targetProject="${project}" type="XMLMAPPER">
             <!-- 是否在当前路径下新加一层schema,eg：fase路径org.byevex.dao， true:org.byevex.dao.[schemaName] -->
             <property name="enableSubPackages" value="false"/>

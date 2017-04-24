@@ -1,4 +1,4 @@
-package com.ccsvip.common.bean;
+package com.vvsvip.common.bean;
 
 /**
  * Fastdfs上传反馈信息

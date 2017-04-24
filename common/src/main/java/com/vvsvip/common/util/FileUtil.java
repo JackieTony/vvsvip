@@ -1,4 +1,4 @@
-package com.ccsvip.common.util;
+package com.vvsvip.common.util;
 
 import java.io.*;
 
