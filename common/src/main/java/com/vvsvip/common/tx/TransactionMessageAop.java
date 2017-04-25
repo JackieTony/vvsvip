@@ -32,7 +32,7 @@ public class TransactionMessageAop {
     private static final String COMMIT_STATUS = "1";
     private static final String ROLLBACK_STATUS = "-1";
 
-    @Pointcut("execution(* com.vvsvip.dubbo.impl.*(..))")
+    @Pointcut("execution(public * com.vvsvip.dubbo..*.*(..))")
     public void pointcut() {
     }
 

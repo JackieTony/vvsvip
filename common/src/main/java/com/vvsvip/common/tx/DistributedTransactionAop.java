@@ -48,7 +48,7 @@ public class DistributedTransactionAop implements Watcher {
     /**
      * 服务切点
      */
-    @Pointcut("execution(* com.vvsvip.dubbo.impl.*(..))")
+    @Pointcut("execution(public * com.vvsvip.dubbo..*.*(..))")
     private void transactionMethod() {
     }
 
