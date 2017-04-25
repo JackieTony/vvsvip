@@ -1,4 +1,4 @@
-package com.vvsvip.common;
+package com.vvsvip.common.lock;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -56,17 +56,15 @@ public class DistributedLock implements Lock, Watcher {
         // 创建一个与服务器的连接
         try {
             zk = new ZooKeeper(config, sessionTimeout, this);
+            System.out.println(zk.getChildren("/dubbo", false));
             Stat stat = zk.exists(lockRoot, false);
             if (stat == null) {
                 // 创建根节点
                 zk.create(lockRoot, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             }
-        } catch (IOException e) {
+        } catch (IOException | KeeperException | InterruptedException e) {
             exception.add(e);
-        } catch (KeeperException e) {
-            exception.add(e);
-        } catch (InterruptedException e) {
-            exception.add(e);
+
         }
     }
 
@@ -113,14 +111,12 @@ public class DistributedLock implements Lock, Watcher {
         }
         try {
             if (this.tryLock()) {
-                System.out.println("Thread " + Thread.currentThread().getId() + " " + lockNode + " get lock true");
+                // System.out.println("Thread " + Thread.currentThread().getId() + " " + lockNode + " get lock true");
                 return;
             } else {
                 waitForLock(waitNode, sessionTimeout, TimeUnit.MILLISECONDS);//等待锁
             }
-        } catch (KeeperException e) {
-            throw new LockException(e);
-        } catch (InterruptedException e) {
+        } catch (KeeperException | InterruptedException e) {
             throw new LockException(e);
         }
     }
@@ -135,7 +131,7 @@ public class DistributedLock implements Lock, Watcher {
             String nodeName = lockRoot + "/" + lockName + splitStr;
             lockNode = zk.create(nodeName, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
 
-            System.out.println(nodeName + " is created ");
+            // System.out.println(nodeName + " is created ");
             //取出所有子节点
             List<String> subNodes = zk.getChildren(lockRoot, false);
 
@@ -150,7 +146,7 @@ public class DistributedLock implements Lock, Watcher {
 
             Collections.sort(lockObjNodes);
 
-            System.out.println(lockNode + "==" + lockObjNodes.get(0));
+            // System.out.println(lockNode + "==" + lockObjNodes.get(0));
             if (lockNode.equals(lockRoot + "/" + lockObjNodes.get(0))) {
                 //如果是最小的节点,则表示取得锁
                 return true;
@@ -160,9 +156,7 @@ public class DistributedLock implements Lock, Watcher {
 
             waitNode = lockObjNodes.get(Collections.binarySearch(lockObjNodes, subMyZnode) - 1);
 
-        } catch (KeeperException e) {
-            throw new LockException(e);
-        } catch (InterruptedException e) {
+        } catch (KeeperException | InterruptedException e) {
             throw new LockException(e);
         }
         return false;
@@ -186,7 +180,7 @@ public class DistributedLock implements Lock, Watcher {
         Stat stat = zk.exists(lockRoot + "/" + preLockNode, true);
         //判断比自己小一个数的节点是否存在,如果不存在则无需等待锁,同时注册监听
         if (stat != null) {
-            System.out.println("Thread " + Thread.currentThread().getId() + " waiting for " + lockRoot + "/" + preLockNode);
+            // System.out.println("Thread " + Thread.currentThread().getId() + " waiting for " + lockRoot + "/" + preLockNode);
             this.latch = new CountDownLatch(1);
             try {
                 readWriteLock.readLock().lock();
@@ -206,13 +200,11 @@ public class DistributedLock implements Lock, Watcher {
      */
     public void unlock() {
         try {
-            System.out.println("unlock " + lockNode);
+            // System.out.println("unlock " + lockNode);
             zk.delete(lockNode, -1);
             lockNode = null;
             zk.close();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } catch (KeeperException e) {
+        } catch (InterruptedException | KeeperException e) {
             e.printStackTrace();
         }
     }
@@ -228,11 +220,11 @@ public class DistributedLock implements Lock, Watcher {
     public class LockException extends RuntimeException {
         private static final long serialVersionUID = 1L;
 
-        public LockException(String e) {
+        LockException(String e) {
             super(e);
         }
 
-        public LockException(Exception e) {
+        LockException(Exception e) {
             super(e);
         }
     }

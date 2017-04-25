@@ -1,10 +1,12 @@
 package com.vvsvip.common.bean;
 
+import java.io.Serializable;
+
 /**
  * Fastdfs上传反馈信息
  * Created by blues on 2017/4/23.
  */
-public class FastdfsBean {
+public class FastdfsBean implements Serializable {
     /**
      * 组名
      */

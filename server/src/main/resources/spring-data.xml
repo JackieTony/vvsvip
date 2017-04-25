@@ -148,7 +148,7 @@
         <constructor-arg name="connectString" value="localhost:2181,localhost:2182,localhost:2183"/>
         <constructor-arg name="sessionTimeout" value="3000"/>
         <constructor-arg name="watcher">
-            <bean class="com.vvsvip.common.DefaultWatcher"/>
+            <bean class="com.vvsvip.common.lock.DefaultWatcher"/>
         </constructor-arg>
     </bean>
 </beans>

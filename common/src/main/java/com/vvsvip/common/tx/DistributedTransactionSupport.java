@@ -18,19 +18,19 @@ public class DistributedTransactionSupport {
     public static void doBegin() {
         // 是否为消费者
         if (isConsumerSide()) {
-            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_KEY.getValue(), DistributedTransactionParams.YES.getValue());
+            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), DistributedTransactionParams.YES.getValue());
         }
     }
 
     public static void doCommited() {
         if (isConsumerSide()) {
-            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_KEY.getValue(), DistributedTransactionParams.COMMITED.getValue());
+            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), DistributedTransactionParams.COMMITED.getValue());
         }
     }
 
     public static void doRollback() {
         if (isConsumerSide()) {
-            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_KEY.getValue(), DistributedTransactionParams.ROLL_BACK.getValue());
+            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), DistributedTransactionParams.ROLL_BACK.getValue());
         }
     }
 }

@@ -7,3 +7,4 @@ target
 *.log
 Test*
 *Test
+/pom.xml

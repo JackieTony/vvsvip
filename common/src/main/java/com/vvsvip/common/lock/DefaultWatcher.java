@@ -1,4 +1,4 @@
-package com.vvsvip.common;
+package com.vvsvip.common.lock;
 
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
