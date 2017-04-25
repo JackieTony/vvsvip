@@ -7,11 +7,15 @@ import org.apache.zookeeper.*;
 import org.apache.zookeeper.data.Stat;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.Signature;
-import org.aspectj.lang.annotation.*;
+import org.aspectj.lang.annotation.AfterThrowing;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectOutputStream;
@@ -21,6 +25,7 @@ import java.net.URLEncoder;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
 /**
@@ -28,12 +33,13 @@ import java.util.concurrent.TimeUnit;
  */
 @Aspect
 @Component
-@Order(3)
+@Order(6)
 public class DistributedTransactionAop implements Watcher {
     /**
      * zookeeper namespace间隔
      */
     private static final String INTERVAL = DistributedTransactionParams.INTERVAL.getValue();
+    private String consumerSideNode;
 
     @Autowired
     private ZooKeeper zooKeeper;
@@ -42,7 +48,7 @@ public class DistributedTransactionAop implements Watcher {
     /**
      * 服务切点
      */
-    @Pointcut("execution(* com.vvsvip.service.impl.*(..))")
+    @Pointcut("execution(* com.vvsvip.dubbo.impl.*(..))")
     private void transactionMethod() {
     }
 
@@ -50,8 +56,42 @@ public class DistributedTransactionAop implements Watcher {
      * 异常抛出 回滚事务
      */
     @AfterThrowing("transactionMethod()")
-    public void doAfterThrow() {
-
+    public void doAfterThrow() throws Exception {
+        if (RpcContext.getContext().isConsumerSide()) {
+            String transactionPath = consumerSideNode;
+            try {
+                if (transactionPath != null) {
+                    Stat stat = zooKeeper.exists(DistributedTransactionParams.ZK_PATH.getValue(), false);
+                    if (stat != null) {
+                        stat = zooKeeper.exists(transactionPath, false);
+                        if (stat != null) {
+                            try {
+                                zooKeeper.setData(transactionPath, "0".getBytes(), -1);
+                                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                                throw new Exception("rollback " + transactionPath);
+                            } finally {
+                                zooKeeper.delete(transactionPath, -1);
+                            }
+                        }
+                    }
+                }
+            } catch (KeeperException | InterruptedException e) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                throw e;
+            }
+        } else {
+            if (providerSideNode != null) {
+                try {
+                    Stat stat = zooKeeper.exists(providerSideNode, false);
+                    if (stat != null) {
+                        zooKeeper.setData(providerSideNode, "1".getBytes(), -1);
+                    }
+                } catch (KeeperException | InterruptedException e) {
+                    TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                    throw e;
+                }
+            }
+        }
     }
 
     @Around("transactionMethod()")
@@ -70,9 +110,11 @@ public class DistributedTransactionAop implements Watcher {
             if (distributedTransaction != null) {
                 transactionCount = distributedTransaction.value();
                 if (transactionCount > 0) {
-                    beforeConsumerSide(joinPoint, transactionCount);
+                    beforeConsumerSide(joinPoint);
                 }
             }
+        } else {
+            beforeProviderSide(joinPoint);
         }
 
         // 执行当前方法
@@ -102,10 +144,9 @@ public class DistributedTransactionAop implements Watcher {
      * 消费者事务准备
      *
      * @param joinPoint
-     * @param transactionCount
      * @throws Exception
      */
-    private void beforeConsumerSide(ProceedingJoinPoint joinPoint, int transactionCount) throws Throwable {
+    private void beforeConsumerSide(ProceedingJoinPoint joinPoint) throws Throwable {
         Stat stat = zooKeeper.exists(DistributedTransactionParams.ZK_PATH.getValue(), false);
         if (stat == null) {
             zooKeeper.create(DistributedTransactionParams.ZK_PATH.getValue(), new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
@@ -139,13 +180,15 @@ public class DistributedTransactionAop implements Watcher {
                 .append(INTERVAL).append(EncryptUtil.encodeBase64(params));
         String namespaceStr = URLEncoder.encode(namespace.toString(), "UTF-8");
 
+
         RpcContext.getContext()
                 .setAttachment(
                         DistributedTransactionParams.TRANSACTION_ZNODE.getValue()
                         , namespaceStr);
 
         // 创建事务节点
-        zooKeeper.create(namespaceStr, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        consumerSideNode = zooKeeper.create(DistributedTransactionParams.ZK_PATH + "/" + namespaceStr, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+
     }
 
 
@@ -157,8 +200,9 @@ public class DistributedTransactionAop implements Watcher {
      */
     private void afterConsumerSide(ProceedingJoinPoint joinPoint, int transactionCount) throws Throwable {
         String znode = RpcContext.getContext().getAttachment(DistributedTransactionParams.TRANSACTION_ZNODE.getValue());
+        String transactionPath = DistributedTransactionParams.ZK_PATH + "/" + znode;
+
         try {
-            String transactionPath = DistributedTransactionParams.ZK_PATH + "/" + znode;
             boolean isSuccess = true;
 
             long startTime = System.currentTimeMillis();
@@ -185,11 +229,25 @@ public class DistributedTransactionAop implements Watcher {
                 zooKeeper.setData(transactionPath, "1".getBytes(), -1);
             } else {
                 zooKeeper.setData(transactionPath, "0".getBytes(), -1);
+
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+
+                throw new Exception("Rollback " + transactionPath);
             }
         } catch (KeeperException | InterruptedException e) {
-            e.printStackTrace();
+            throw e;
+        } finally {
+            zooKeeper.delete(transactionPath, -1);
         }
     }
+
+
+    private CountDownLatch countDownLatch;
+
+    private long listenerTimeout = 3000;
+    private TimeUnit timeUnit = TimeUnit.MILLISECONDS;
+
+    private String providerSideNode;
 
     /**
      * 生产者事务准备
@@ -200,6 +258,13 @@ public class DistributedTransactionAop implements Watcher {
     private void beforeProviderSide(ProceedingJoinPoint joinPoint) throws Throwable {
         String znode = RpcContext.getContext().getAttachment(DistributedTransactionParams.TRANSACTION_ZNODE.getValue());
         String transactionPath = DistributedTransactionParams.ZK_PATH + "/" + znode;
+
+        //添加根节点监听
+        byte[] data = zooKeeper.getData(transactionPath, this, null);
+        if (data != null && "0".equals(data)) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            throw new Exception("事务回滚：" + znode);
+        }
 
         // zkNamespace
         StringBuffer namespace = new StringBuffer();
@@ -221,6 +286,7 @@ public class DistributedTransactionAop implements Watcher {
         objectOutputStream.writeObject(args);
         // 将所持有参数转为二进制数据
         byte[] params = byteArrayOutputStream.toByteArray();
+
         // 拼接transaction znode namespace
         namespace.append(ip)
                 .append(INTERVAL).append(zkSessionId)
@@ -228,13 +294,8 @@ public class DistributedTransactionAop implements Watcher {
                 .append(INTERVAL).append(methodName)
                 .append(INTERVAL).append(EncryptUtil.encodeBase64(params));
         String namespaceStr = URLEncoder.encode(namespace.toString(), "UTF-8");
-
-        //TODO 将 namespaceStr 该消息存入数据库
-        
-
-        //添加根节点监听
-        zooKeeper.getData(transactionPath, this, null);
-
+        // 创建事务节点
+        providerSideNode = zooKeeper.create(transactionPath + "/" + namespaceStr, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
     }
 
     /**
@@ -242,12 +303,57 @@ public class DistributedTransactionAop implements Watcher {
      *
      * @param joinPoint
      */
-    private void afterProviderSide(ProceedingJoinPoint joinPoint) {
+    private void afterProviderSide(ProceedingJoinPoint joinPoint) throws Exception {
+        try {
+            zooKeeper.setData(providerSideNode, "1".getBytes(), -1);
+        } catch (Exception e) {
 
+        }
+        countDownLatch = new CountDownLatch(1);
+        try {
+            readWriteLock.readLock().lock();
+            if (!isProcessed) {
+                countDownLatch.await(listenerTimeout, timeUnit);
+            }
+        } finally {
+            readWriteLock.readLock().unlock();
+        }
+        countDownLatch = null;
+
+        String znode = RpcContext.getContext().getAttachment(DistributedTransactionParams.TRANSACTION_ZNODE.getValue());
+        String transactionPath = DistributedTransactionParams.ZK_PATH + "/" + znode;
+        byte[] data = zooKeeper.getData(transactionPath, false, null);
+        String transactionCommit = new String(data);
+        if (transactionCommit == null || "0".equals(transactionCommit)) {
+            TransactionMessageAop.paramsThreadLocal.set(DistributedTransactionParams.ROLL_BACK);
+            throw new Exception("rollback " + providerSideNode);
+        } else {
+            TransactionMessageAop.paramsThreadLocal.set(DistributedTransactionParams.COMMITED);
+        }
     }
 
-    @Override
-    public void process(WatchedEvent watchedEvent) {
+    /**
+     * 节点监视器读写锁
+     */
+    private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+    /**
+     * 是否已经出发监视器
+     */
+    private boolean isProcessed = false;
 
+    /**
+     * zookeeper节点的监视器
+     */
+    @Override
+    public void process(WatchedEvent event) {
+        try {
+            readWriteLock.writeLock().lock();
+            if (countDownLatch != null) {
+                countDownLatch.countDown();
+            }
+            isProcessed = true;
+        } finally {
+            readWriteLock.writeLock().unlock();
+        }
     }
 }

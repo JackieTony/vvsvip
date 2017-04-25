@@ -1,6 +1,6 @@
 package com.vvsvip.core;
 
-import com.alibaba.dubbo.rpc.proxy.InvokerInvocationHandler;
+
 import com.vvsvip.shop.test.service.IHelloWorldManager;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 

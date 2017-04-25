@@ -2,14 +2,11 @@ package com.vvsvip.common.tx;
 
 import com.alibaba.dubbo.rpc.RpcContext;
 
-import java.util.Hashtable;
-
 /**
  * 分布式事务标记
  * Created by ADMIN on 2017/4/24.
  */
 public class DistributedTransactionSupport {
-    private static ThreadLocal<Hashtable<String, String>> threadLocal = new ThreadLocal<Hashtable<String, String>>();
 
     private static boolean isConsumerSide() {
         return RpcContext.getContext().isConsumerSide();
@@ -24,13 +21,22 @@ public class DistributedTransactionSupport {
 
     public static void doCommited() {
         if (isConsumerSide()) {
-            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), DistributedTransactionParams.COMMITED.getValue());
+            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), null);
         }
     }
 
     public static void doRollback() {
         if (isConsumerSide()) {
-            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), DistributedTransactionParams.ROLL_BACK.getValue());
+            RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), null);
         }
+    }
+
+    /**
+     * 是否开启分布式事务
+     *
+     * @return
+     */
+    public static boolean isDistributedTransaction() {
+        return RpcContext.getContext().getAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue()) != null;
     }
 }

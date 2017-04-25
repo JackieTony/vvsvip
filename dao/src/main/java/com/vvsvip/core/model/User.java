@@ -7,12 +7,6 @@ public class User {
 
     private String password;
 
-    private Integer age;
-
-    private Integer sex;
-
-    private String email;
-
     public Integer getId() {
         return id;
     }
@@ -35,29 +29,5 @@ public class User {
 
     public void setPassword(String password) {
         this.password = password == null ? null : password.trim();
-    }
-
-    public Integer getAge() {
-        return age;
-    }
-
-    public void setAge(Integer age) {
-        this.age = age;
-    }
-
-    public Integer getSex() {
-        return sex;
-    }
-
-    public void setSex(Integer sex) {
-        this.sex = sex;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email == null ? null : email.trim();
     }
 }
