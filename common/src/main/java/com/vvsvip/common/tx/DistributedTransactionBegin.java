@@ -1,8 +1,11 @@
 package com.vvsvip.common.tx;
 
+import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.data.Stat;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +16,9 @@ import org.springframework.stereotype.Component;
 @Component
 @Order(3)
 public class DistributedTransactionBegin {
+
+    @Autowired
+    private ZooKeeper zooKeeper;
 
     @Pointcut("execution(* com.vvsvip.service.impl.*(..))")
     private void transactionMethod() {
@@ -36,13 +42,17 @@ public class DistributedTransactionBegin {
 
     @AfterThrowing("transactionMethod()")
     public void doAfterThrow() {
+
         System.out.println("例外通知");
     }
 
     @Around("transactionMethod()")
     public Object doAround(ProceedingJoinPoint pjp) throws Throwable {
         System.out.println("进入环绕通知");
+        Stat stat = zooKeeper.exists(DistributedTransactionParams.ZK_PATH.getValue(), false);
+        if (stat == null) {
 
+        }
         Object object = pjp.proceed();
 
         System.out.println("退出方法");

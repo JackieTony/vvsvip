@@ -143,4 +143,12 @@
             </list>
         </constructor-arg>
     </bean>
+
+    <bean id="zookeeper" class="org.apache.zookeeper.ZooKeeper" scope="prototype">
+        <constructor-arg name="connectString" value="localhost:2181,localhost:2182,localhost:2183"/>
+        <constructor-arg name="sessionTimeout" value="3000"/>
+        <constructor-arg name="watcher">
+            <bean class="com.vvsvip.common.DefaultWatcher"/>
+        </constructor-arg>
+    </bean>
 </beans>

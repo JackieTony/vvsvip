@@ -5,3 +5,5 @@ target
 *.epoch
 *.lck
 *.log
+Test*
+*Test
