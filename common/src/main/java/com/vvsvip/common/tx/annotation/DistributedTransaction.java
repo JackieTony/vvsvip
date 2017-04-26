@@ -9,4 +9,6 @@ package com.vvsvip.common.tx.annotation;
 @java.lang.annotation.Target({java.lang.annotation.ElementType.METHOD})
 public @interface DistributedTransaction {
     int value() default -1;
+
+    boolean consumerSide() default false;
 }

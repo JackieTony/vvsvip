@@ -14,19 +14,19 @@ public class DistributedTransactionSupport {
 
     public static void doBegin() {
         // 是否为消费者
-        if (isConsumerSide()) {
+        if (isConsumerSide() || (TransactionMessageAop.threadParam.get() != null && Boolean.valueOf(String.valueOf(TransactionMessageAop.threadParam.get().get(TransactionMessageAop.IS_CONSUMER_SIDE))))) {
             RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), DistributedTransactionParams.YES.getValue());
         }
     }
 
     public static void doCommited() {
-        if (isConsumerSide()) {
+        if (isConsumerSide() || (TransactionMessageAop.threadParam.get() != null && Boolean.valueOf(String.valueOf(TransactionMessageAop.threadParam.get().get(TransactionMessageAop.IS_CONSUMER_SIDE))))) {
             RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), null);
         }
     }
 
     public static void doRollback() {
-        if (isConsumerSide()) {
+        if (isConsumerSide() || (TransactionMessageAop.threadParam.get() != null && Boolean.valueOf(String.valueOf(TransactionMessageAop.threadParam.get().get(TransactionMessageAop.IS_CONSUMER_SIDE))))) {
             RpcContext.getContext().setAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue(), null);
         }
     }

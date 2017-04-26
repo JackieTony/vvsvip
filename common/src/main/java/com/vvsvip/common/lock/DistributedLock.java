@@ -17,7 +17,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-@Component
 public class DistributedLock implements Lock, Watcher {
     @Autowired
     private ZooKeeper zookeeper;

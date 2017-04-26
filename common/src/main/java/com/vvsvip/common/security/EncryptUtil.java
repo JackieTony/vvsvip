@@ -10,7 +10,7 @@ import java.io.IOException;
  * Created by ADMIN on 2017/4/25.
  */
 public class EncryptUtil {
-    
+
     private static BASE64Encoder base64Encoder = new BASE64Encoder();
     private static BASE64Decoder base64Decoder = new BASE64Decoder();
 
@@ -21,6 +21,9 @@ public class EncryptUtil {
      * @return 返回转码后的字符串
      */
     public static String encodeBase64(byte[] bytes) {
+        if (bytes == null) {
+            return "";
+        }
         return base64Encoder.encode(bytes);
     }
 
@@ -32,6 +35,9 @@ public class EncryptUtil {
      * @throws IOException 转码异常
      */
     public static byte[] decodeBase64(String cipher) throws IOException {
+        if (cipher == null) {
+            cipher = "";
+        }
         return base64Decoder.decodeBuffer(cipher);
     }
 }

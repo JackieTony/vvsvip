@@ -17,7 +17,7 @@ public class Executor implements Watcher, Runnable {
     private ZooKeeper zooKeeper;
     CountDownLatch downLatch = new CountDownLatch(4);
 
-    public static void main(String[] args) throws IOException, KeeperException, InterruptedException {
+    public void main(String[] args) throws IOException, KeeperException, InterruptedException {
         Executor executor = new Executor();
         ZooKeeper zooKeeper = executor.getZooKeeper();
         System.out.println(executor.getClass().getName().toString());

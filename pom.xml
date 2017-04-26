@@ -12,6 +12,7 @@
         <module>server</module>
         <module>dao</module>
         <module>service-interface</module>
+        <module>test</module>
     </modules>
 
 
@@ -23,7 +24,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>1.4.1.RELEASE</version>
+        <version>1.5.3.RELEASE</version>
     </parent>
 
     <properties>
@@ -42,7 +43,7 @@
 
         <!-- log -->
         <log.sf4j.version>1.7.21</log.sf4j.version>
-        <log.logback.version>1.1.7</log.logback.version>
+        <log.logback.version>1.2.3</log.logback.version>
 
         <!-- active MQ-->
         <activeMQ.core.version>5.7.0</activeMQ.core.version>
@@ -122,6 +123,11 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-tx</artifactId>
+            <version>${spring.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
             <version>${spring.version}</version>
         </dependency>
         <dependency>

@@ -11,5 +11,7 @@
 
     <artifactId>service-interface</artifactId>
     <packaging>jar</packaging>
-
+    <build>
+        <finalName>server-interface</finalName>
+    </build>
 </project>

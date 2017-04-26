@@ -68,7 +68,7 @@
     <root level="TRACE">
         <appender-ref ref="CONSOLE"/> <!-- 标识这个appender将会添加到这个logger -->
     </root>
-    logger name="org.springframework" level="WARN"/>
+    <logger name="org.springframework" level="TRACE"/>
     <logger name="org.springframework.remoting" level="WARN"/>
     <logger name="org.springframework.scheduling.quartz" level="WARN"/>
     <logger name="org.springframework.data.jpa" level="DEBUG"/>

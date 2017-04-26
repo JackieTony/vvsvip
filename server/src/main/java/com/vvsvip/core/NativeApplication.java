@@ -10,7 +10,7 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 public class NativeApplication {
     ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("classpath:spring-cloud-2.xml");
 
-    public static void main(String[] args) {
+    public void main(String[] args) {
         NativeApplication application = new NativeApplication();
         application.context.start();
         for (int i = 0; i < 1; i++) {
