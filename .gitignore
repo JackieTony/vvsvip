@@ -5,6 +5,3 @@ target
 *.epoch
 *.lck
 *.log
-Test*
-*Test
-/pom.xml

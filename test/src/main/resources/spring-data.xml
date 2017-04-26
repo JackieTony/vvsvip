@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns="http://www.springframework.org/schema/beans"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context-4.3.xsd
+        http://www.springframework.org/schema/aop
+        http://www.springframework.org/schema/aop/spring-aop-4.3.xsd
+        http://www.springframework.org/schema/tx
+        http://www.springframework.org/schema/tx/spring-tx-4.3.xsd">
+
+    <context:component-scan base-package="com.vvsvip"/>
+
+    <context:property-placeholder location="classpath:config/jdbc.properties"/>
+
+
+    <!-- 数据源定义,使用Apache DBCP 连接池
+    <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+        <property name="driverClassName" value="${jdbc.driverClassName}"/>
+        <property name="url" value="${jdbc.url}"/>
+        <property name="username" value="${jdbc.username}"/>
+        <property name="password" value="${jdbc.password}"/>
+        <property name="initialSize" value="5" />
+        <property name="maxActive" value="100" />
+        <property name="maxIdle" value="30" />
+        <property name="maxWait" value="1000" />
+    </bean>
+     -->
+    <!--
+    <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource" destroy-method="close">
+        <property name="driverClass" value="${jdbc.driverClassName}"/>
+        <property name="jdbcUrl" value="${jdbc.url}"/>
+        <property name="user" value="${jdbc.username}"/>
+        <property name="password" value="${jdbc.password}"/>
+        <property name="minPoolSize" value="50"/>
+        <property name="maxPoolSize" value="400"/>
+        <property name="maxIdleTime" value="1800"/>
+        <property name="acquireIncrement" value="2"/>
+        <property name="maxStatements" value="0"/>
+        <property name="initialPoolSize" value="50"/>
+        <property name="idleConnectionTestPeriod" value="60"/>
+        <property name="acquireRetryAttempts" value="30"/>
+        <property name="breakAfterAcquireFailure" value="true"/>
+        <property name="testConnectionOnCheckout" value="true"/>
+    </bean>
+    -->
+    <bean id="dataSource" class="com.atomikos.jdbc.AtomikosDataSourceBean"
+          init-method="init" destroy-method="close">
+        <property name="uniqueResourceName" value="ds1"/>
+        <!--        <property name="xaDataSourceClassName" value="${jdbc.driverClassName}" /> -->
+        <property name="xaDataSourceClassName" value="com.mysql.jdbc.jdbc2.optional.MysqlXADataSource"/>
+        <property name="xaProperties">
+            <props>
+                <prop key="URL">${jdbc.url}</prop>
+                <prop key="user">${jdbc.username}</prop>
+                <prop key="password">${jdbc.password}</prop>
+            </props>
+        </property>
+        <!--        #连接池中保留的最小连接数 -->
+        <property name="minPoolSize" value="5"/>
+        <!--        #连接池中保留的最大连接数  -->
+        <property name="maxPoolSize" value="20"/>
+        <!--        #最大空闲时间,60秒内未使用则连接被丢弃。若为0则永不丢弃。Default:  -->
+        <property name="maxIdleTime" value="60"/>
+        <property name="testQuery">
+            <value>select 1</value>
+        </property>
+    </bean>
+
+
+    <!--基于注解的事务管理-->
+    <bean id="userTransactionService" class="com.atomikos.icatch.config.UserTransactionServiceImp"
+          init-method="init" destroy-method="shutdownForce">
+        <constructor-arg>
+            <props>
+                <prop key="com.atomikos.icatch.service">com.atomikos.icatch.standalone.UserTransactionServiceFactory
+                </prop>
+            </props>
+        </constructor-arg>
+    </bean>
+
+    <bean id="atomikosTransactionManager"
+          class="com.atomikos.icatch.jta.UserTransactionManager"
+          depends-on="userTransactionService"
+          init-method="init" destroy-method="close">
+        <property name="forceShutdown" value="false"/>
+    </bean>
+
+    <bean id="atomikosUserTransaction" class="com.atomikos.icatch.jta.UserTransactionImp">
+        <property name="transactionTimeout" value="300"/>
+    </bean>
+
+    <!-- 分布式事务管理器 -->
+    <bean id="transactionManager" class="com.vvsvip.common.tx.ZkJtaTransactionManager">
+        <property name="transactionManager" ref="atomikosTransactionManager"/>
+        <property name="userTransaction" ref="atomikosUserTransaction"/>
+    </bean>
+
+    <aop:aspectj-autoproxy proxy-target-class="true"/>
+
+    <!-- 可通过注解控制事务，也可以配置拦截器方式配置事务 -->
+    <tx:annotation-driven transaction-manager="transactionManager" order="5"/>
+    <!--<tx:jta-transaction-manager/>-->
+
+    <bean id="sqlSessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="dataSource"/>
+        <property name="configLocation" value="classpath:mybatis-config.xml"/>
+        <!-- 当mybatis的xml文件和mapper接口不在相同包下时，需要用mapperLocations属性指定xml文件的路径。
+             *是个通配符，代表所有的文件，**代表所有目录下 -->
+        <property name="mapperLocations" value="classpath*:**/*Mapper.xml"/>
+    </bean>
+
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.vvsvip"/>
+        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactoryBean"/>
+    </bean>
+
+    <bean id="jedisPoolConfig" class="redis.clients.jedis.JedisPoolConfig">
+        <property name="maxTotal" value="30"/>
+        <property name="maxIdle" value="10"/>
+        <property name="numTestsPerEvictionRun" value="1024"/>
+        <property name="timeBetweenEvictionRunsMillis" value="30000"/>
+        <property name="minEvictableIdleTimeMillis" value="180000"/>
+        <property name="softMinEvictableIdleTimeMillis" value="10000"/>
+        <property name="maxWaitMillis" value="1500"/>
+        <property name="testOnBorrow" value="true"/>
+        <property name="testWhileIdle" value="true"/>
+        <property name="blockWhenExhausted" value="false"/>
+    </bean>
+    <bean id="shardedJedisPool" class="redis.clients.jedis.ShardedJedisPool" destroy-method="close">
+        <constructor-arg name="poolConfig" ref="jedisPoolConfig"/>
+        <constructor-arg name="shards">
+            <list>
+                <bean class="redis.clients.jedis.JedisShardInfo">
+                    <constructor-arg name="host" value="127.0.0.1"/>
+                    <constructor-arg name="port" value="6379"/>
+                    <property name="password" value="admin"/>
+                </bean>
+            </list>
+        </constructor-arg>
+    </bean>
+
+    <bean id="zkClient" class="org.I0Itec.zkclient.ZkClient" scope="prototype">
+        <constructor-arg name="zkServers" value="192.168.214.100:2181,192.168.214.101:2181"/>
+        <constructor-arg name="sessionTimeout" value="30000"/>
+        <constructor-arg name="connectionTimeout" value="30000"/>
+    </bean>
+
+    <bean id="distributedTransactionAopBean" class="com.vvsvip.common.tx.DistributedTransactionAop" scope="prototype"/>
+    <bean id="transactionMessageAopBean" class="com.vvsvip.common.tx.TransactionMessageAop" scope="prototype"/>
+    <aop:config>
+        <aop:pointcut id="transactionPointcut" expression="execution(public * com.vvsvip.test.TestTransaction.*(..))"/>
+        <aop:aspect id="distributedTransactionAop" ref="distributedTransactionAopBean" order="6">
+            <aop:around pointcut-ref="transactionPointcut" method="doAround"/>
+            <aop:after-throwing pointcut-ref="transactionPointcut" method="doAfterThrow"/>
+        </aop:aspect>
+        <aop:aspect id="transactionMessageAop" ref="transactionMessageAopBean" order="4">
+            <aop:around pointcut-ref="transactionPointcut" method="around"/>
+        </aop:aspect>
+    </aop:config>
+</beans>
