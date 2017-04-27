@@ -9,14 +9,18 @@
     <!-- 消费方应用名，用于计算依赖关系，不是匹配条件，不要与提供方一样 -->
     <dubbo:application name="consumer-of-helloworld-app-my"/>
     <!-- 使用zookeeper广播注册中心暴露发现服务地址 -->
+
+    <dubbo:registry address="192.168.214.100" protocol="zookeeper" port="2181" timeout="200000"/>
+
     <!--
-        <dubbo:registry address="192.168.214.100" protocol="zookeeper" port="2181"/>
+        <dubbo:protocol name="dubbo" port="20880" register="false"/>
     -->
-    <dubbo:protocol name="dubbo" port="20880" register="false"/>
 
     <dubbo:consumer/>
     <dubbo:monitor/>
     <!-- 生成远程服务代理，可以和本地bean一样使用demoService -->
     <dubbo:reference id="helloWorldManager" interface="com.vvsvip.shop.test.service.IHelloWorldManager" check="false"
-                     mock="return null"/>
+                     mock="return null" timeout="200000"/>
+    <dubbo:reference id="payManager" interface="com.vvsvip.shop.test.service.IPayManager" check="false"
+                     mock="return null" timeout="200000"/>
 </beans>

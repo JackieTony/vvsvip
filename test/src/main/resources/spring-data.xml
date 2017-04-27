@@ -150,8 +150,12 @@
         <constructor-arg name="connectionTimeout" value="30000"/>
     </bean>
 
-    <bean id="distributedTransactionAopBean" class="com.vvsvip.common.tx.DistributedTransactionAop" scope="prototype"/>
+    <bean id="distributedTransactionAopBean" class="com.vvsvip.common.tx.DistributedTransactionConsumerSideAOP"
+          scope="prototype"/>
     <bean id="transactionMessageAopBean" class="com.vvsvip.common.tx.TransactionMessageAop" scope="prototype"/>
+    <bean id="transactionSupportAopBean" class="com.vvsvip.common.tx.DisstibutedTransactionSupportAOP"
+          scope="prototype"/>
+
     <aop:config>
         <aop:pointcut id="transactionPointcut" expression="execution(public * com.vvsvip.test.TestTransaction.*(..))"/>
         <aop:aspect id="distributedTransactionAop" ref="distributedTransactionAopBean" order="6">
@@ -160,6 +164,9 @@
         </aop:aspect>
         <aop:aspect id="transactionMessageAop" ref="transactionMessageAopBean" order="4">
             <aop:around pointcut-ref="transactionPointcut" method="around"/>
+        </aop:aspect>
+        <aop:aspect id="transactionSupport" ref="transactionSupportAopBean">
+            <aop:before pointcut="execution(public * com.vvsvip.shop.test.service..*(..))" method="before"/>
         </aop:aspect>
     </aop:config>
 </beans>

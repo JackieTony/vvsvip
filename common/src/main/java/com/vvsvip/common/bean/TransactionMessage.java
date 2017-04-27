@@ -17,7 +17,7 @@ public class TransactionMessage {
 
     private Date operateTime = new Date();
 
-    private String status;
+    private String status = "0";
 
     public TransactionMessage() {
     }

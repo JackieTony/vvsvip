@@ -88,6 +88,7 @@
           depends-on="userTransactionService"
           init-method="init" destroy-method="close">
         <property name="forceShutdown" value="false"/>
+        <property name="transactionTimeout" value="3000"/>
     </bean>
 
     <bean id="atomikosUserTransaction" class="com.atomikos.icatch.jta.UserTransactionImp">
@@ -103,9 +104,9 @@
     <aop:aspectj-autoproxy proxy-target-class="true"/>
 
     <!-- 可通过注解控制事务，也可以配置拦截器方式配置事务 -->
-<!--
-    <tx:annotation-driven transaction-manager="transactionManager" order="5"/>
--->
+    <!--
+        <tx:annotation-driven transaction-manager="transactionManager" order="5"/>
+    -->
     <!--<tx:jta-transaction-manager/>-->
 
     <bean id="sqlSessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
@@ -147,8 +148,8 @@
     </bean>
     <bean id="zkClient" class="org.I0Itec.zkclient.ZkClient" scope="prototype">
         <constructor-arg name="zkServers" value="192.168.214.100:2181,192.168.214.101:2181"/>
-        <constructor-arg name="sessionTimeout" value="180000"/>
-        <constructor-arg name="connectionTimeout" value="180000"/>
+        <constructor-arg name="sessionTimeout" value="3000000"/>
+        <constructor-arg name="connectionTimeout" value="3000000"/>
     </bean>
 
     <bean id="distributedTransactionProviderSideAOP" class="com.vvsvip.common.tx.DistributedTransactionProviderSideAOP"
@@ -156,7 +157,7 @@
     <bean id="distributedTransactionAOP" class="com.vvsvip.common.tx.DistributedTransactionAop" scope="prototype"/>
     <bean id="transactionMessageAopBean" class="com.vvsvip.common.tx.TransactionMessageAop" scope="prototype"/>
     <aop:config>
-        <aop:pointcut id="transactionPointcut" expression="execution(public * com.vvsvip.dubbo..say*(..))"/>
+        <aop:pointcut id="transactionPointcut" expression="execution(public * com.vvsvip.dubbo..pay*(..))"/>
         <aop:aspect id="distributedTransactionProviderSideAOP" ref="distributedTransactionProviderSideAOP" order="6">
             <aop:around pointcut-ref="transactionPointcut" method="doAround"/>
             <aop:after-throwing pointcut-ref="transactionPointcut" method="doAfterThrow"/>

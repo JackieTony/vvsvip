@@ -10,10 +10,10 @@
     <dubbo:application name="dubbo-service"/>
     <dubbo:registry address="zookeeper://192.168.214.100:2181"/>
     <!-- 用dubbo协议在20880端口暴露服务 -->
-    <dubbo:protocol name="dubbo" port="20882"/>
+    <dubbo:protocol name="dubbo" port="20883"/>
 
     <!--<dubbo:annotation package="com.vvsvip.dubbo"/>-->
     <dubbo:monitor/>
     <dubbo:provider/>
-    <dubbo:service interface="com.vvsvip.shop.test.service.IHelloWorldManager" ref="helloWorldManager"/>
+    <dubbo:service interface="com.vvsvip.shop.test.service.IPayManager" ref="payManager"/>
 </beans>

@@ -1,392 +1,107 @@
 package com.vvsvip.common.tx;
 
 import com.alibaba.dubbo.rpc.RpcContext;
-import com.vvsvip.common.security.EncryptUtil;
-import com.vvsvip.common.tx.annotation.DistributedTransaction;
-import org.I0Itec.zkclient.IZkDataListener;
+import com.atomikos.icatch.jta.UserTransactionManager;
+import com.vvsvip.common.bean.TransactionMessage;
+import com.vvsvip.common.dao.TransactionMessageMapper;
 import org.I0Itec.zkclient.ZkClient;
-import org.apache.zookeeper.*;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.Signature;
-import org.aspectj.lang.annotation.AfterThrowing;
-import org.aspectj.lang.annotation.Around;
-import org.aspectj.lang.annotation.Pointcut;
-import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.annotation.Order;
-import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
-import java.io.ByteArrayOutputStream;
-import java.io.ObjectOutputStream;
-import java.lang.reflect.Method;
-import java.net.InetAddress;
-import java.net.URLEncoder;
-import java.util.List;
+import javax.transaction.*;
+import javax.transaction.xa.XAResource;
+import java.util.Hashtable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 
 /**
  * Created by ADMIN on 2017/4/24.
  */
-@Order(6)
 public class DistributedTransactionAop {
 
-    Logger logger = LoggerFactory.getLogger(DistributedTransactionAop.class);
-
-    /**
-     * zookeeper namespace间隔
-     */
-    private static final String INTERVAL = DistributedTransactionParams.INTERVAL.getValue();
-    private String namespace;
-    private String consumerSideNode;
+    private static final Logger logger = LoggerFactory.getLogger(DistributedTransactionAop.class);
+    @Autowired
+    private UserTransactionManager atomikosTransactionManager;
+    @Autowired
+    private TransactionMessageMapper transactionMessageMapper;
 
     @Autowired
     private ZkClient zkClient;
 
-    /**
-     * 节点监视器读写锁
-     */
-    private ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
-    /**
-     * 是否已经出发监视器
-     */
-    private boolean isProcessed = false;
-
-    /**
-     * 服务切点
-     */
-    @Pointcut("execution(public * com.vvsvip.dubbo..*.*(..))")
-    private void transactionMethod() {
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
+        begin();
+        Object obj = joinPoint.proceed();
+        end();
+        return obj;
     }
 
-    /**
-     * 异常抛出 回滚事务
-     */
-    @AfterThrowing("transactionMethod()")
-    public void doAfterThrow() throws Exception {
-        logger.info("异常拦截开始回滚事务");
-        if (RpcContext.getContext().isConsumerSide()) {
-            String transactionPath = consumerSideNode;
-            try {
-                if (transactionPath != null) {
-                    boolean stat = zkClient.exists(DistributedTransactionParams.ZK_PATH.getValue());
-                    if (stat) {
-                        stat = zkClient.exists(transactionPath);
-                        if (stat) {
-                            try {
-                                zkClient.writeData(transactionPath, "0", -1);
-                                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-                                throw new Exception("rollback " + transactionPath);
-                            } finally {
-                                zkClient.deleteRecursive(transactionPath);
-                            }
-                        }
-                    }
-                }
-            } catch (KeeperException | InterruptedException e) {
-                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-                throw e;
-            }
+    public void throwing() throws SystemException {
+        if (DistributedTransactionSupport.isExecutable()
+                && !DistributedTransactionSupport.isConsumerSide() && DistributedTransactionSupport.getZNode() != null) {
+            new DistributedTransactionAop.TransactionThread(atomikosTransactionManager.getTransaction(), TransactionMessageAop.threadParam.get(), DistributedTransactionParams.COMMITED, zkClient, transactionMessageMapper).start();
         } else {
-            if (providerSideNode != null) {
-                boolean stat = zkClient.exists(providerSideNode);
-                if (stat) {
-                    zkClient.writeData(providerSideNode, "1", -1);
-                }
-            }
+            atomikosTransactionManager.rollback();
+            logger.debug(RpcContext.getContext().getLocalHost() + "回滚事务");
+            TransactionMessageAop.paramsThreadLocal.set(DistributedTransactionParams.ROLL_BACK);
+            DistributedTransactionSupport.doRollback();
         }
     }
 
-    @Around("transactionMethod()")
-    public Object doAround(final ProceedingJoinPoint joinPoint) throws Throwable {
-        Boolean exec = Boolean.parseBoolean(String.valueOf(TransactionMessageAop.threadParam.get().get(TransactionMessageAop.EXECUTE_SIGN)));
-        Signature signature = joinPoint.getSignature();
-        MethodSignature methodSignature = (MethodSignature) signature;
-        Method targetMethod = methodSignature.getMethod();
-        DistributedTransaction distributedTransaction = targetMethod.getAnnotation(DistributedTransaction.class);
-        int transactionCount = 0;
-        boolean isConsumerSide = false;
-
-        CountDownLatch countDownLatch = null;
-        if (exec) {
-            if (distributedTransaction != null) {
-                isConsumerSide = distributedTransaction.consumerSide();
-            }
-
-            // 消费者节点 准备开启事务
-            if (RpcContext.getContext().isConsumerSide() || isConsumerSide) {
-                if (distributedTransaction != null) {
-                    transactionCount = distributedTransaction.value();
-                    if (transactionCount > 0) {
-                        logger.info("ConsumerSide doAround begin");
-
-                        beforeConsumerSide(joinPoint);
-                    }
-                }
-            } else {
-                logger.info("ProviderSide doAround begin");
-                beforeProviderSide(joinPoint);
-            }
-            // 事务尾声处理
-            if (isConsumerSide) {
-                if (distributedTransaction != null && transactionCount > 0) {
-                    countDownLatch = new CountDownLatch(1);
-                    new ConsumerSideTread(joinPoint, transactionCount, countDownLatch).start();
-                }
-            }
-        }
-
-        // 执行当前方法
-        Object object = joinPoint.proceed();
-        if (countDownLatch != null) {
-            countDownLatch.await(listenerTimeout, TimeUnit.MILLISECONDS);
-        }
-        if (exec) {
-            if (!isConsumerSide
-                    &&
-                    DistributedTransactionParams.YES.getValue().equals(RpcContext.getContext()
-                            .getAttachment(DistributedTransactionParams.TRANSACTION_STATUS.getValue()))) {
-                afterProviderSide(joinPoint);
-                logger.info("ProviderSide doAround success");
-
-            }
-        }
-        return object;
+    public void begin() throws SystemException, NotSupportedException {
+        atomikosTransactionManager.begin();
+        logger.debug(RpcContext.getContext().getLocalHost() + "开启事务");
+        DistributedTransactionSupport.doBegin();
     }
 
-    /**
-     * 消费者事务准备
-     *
-     * @param joinPoint
-     * @throws Exception
-     */
-    private void beforeConsumerSide(ProceedingJoinPoint joinPoint) throws Throwable {
-        boolean stat = zkClient.exists(DistributedTransactionParams.ZK_PATH.getValue());
-        if (!stat) {
-            zkClient.create(DistributedTransactionParams.ZK_PATH.getValue(), "", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-        }
-        // zkNamespace
-        StringBuffer namespaceBuffer = new StringBuffer();
-
-        // 获取本地IP地址
-        String ip = InetAddress.getLocalHost().getHostAddress();
-        // 获取当前方法所在的类
-        Object target = joinPoint.getTarget();
-        String clazzName = target.getClass().getName();
-
-        // 获取当前方法的名字
-        String methodName = joinPoint.getSignature().getName();
-        // 获取当前方法的所有参数
-        Object[] args = joinPoint.getArgs();
-
-        byte[] params = null;
-        if (args != null && args.length > 0) {
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
-            objectOutputStream.writeObject(args);
-            // 将所持有参数转为二进制数据
-            params = byteArrayOutputStream.toByteArray();
-        }
-        // 拼接transaction znode namespace
-        namespaceBuffer.append(ip)
-                .append(INTERVAL).append(System.currentTimeMillis())
-                .append(INTERVAL).append(clazzName)
-                .append(INTERVAL).append(methodName)
-                .append(INTERVAL).append(EncryptUtil.encodeBase64(params));
-        this.namespace = URLEncoder.encode(namespaceBuffer.toString(), "UTF-8");
-
-
-        RpcContext.getContext()
-                .setAttachment(
-                        DistributedTransactionParams.TRANSACTION_ZNODE.getValue()
-                        , this.namespace);
-
-        // 创建事务节点
-        consumerSideNode = zkClient.create(DistributedTransactionParams.ZK_PATH + "/" + this.namespace, "", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-
-    }
-
-
-    /**
-     * 消费者事务处理
-     *
-     * @param joinPoint
-     * @param transactionCount
-     */
-    private void afterConsumerSide(ProceedingJoinPoint joinPoint, int transactionCount) throws Throwable {
-        logger.info("afterConsumerSide begin");
-        String transactionPath = DistributedTransactionParams.ZK_PATH + "/" + this.namespace;
-        try {
-            boolean isSuccess = true;
-
-            long startTime = System.currentTimeMillis();
-            while (true) {
-                // 事务节点
-                List<String> childreList = zkClient.getChildren(transactionPath);
-                for (int i = 0; i < childreList.size(); i++) {
-                    String node = childreList.get(i);
-                    String subPath = transactionPath + "/" + node;
-                    try {
-                        String data = zkClient.readData(subPath, true);
-                        // 确认当前节点事务是否完成
-                        if (data != null && !data.isEmpty()) {
-                            isSuccess &= Integer.valueOf(data) == 1;
-                        }
-                    } catch (Exception e) {
-
-                    }
-                }
-                // 是否为所有节点状态
-                if (childreList.size() == transactionCount || !isSuccess) {
-                    break;
-                }
-                if (System.currentTimeMillis() - startTime > listenerTimeout) {
-                    isSuccess = false;
-                }
-                Thread.sleep(50);
-            }
-            if (isSuccess) {
-                zkClient.writeData(transactionPath, "1", -1);
-            } else {
-                zkClient.writeData(transactionPath, "0", -1);
-
-                //TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-
-                throw new Exception("Rollback " + transactionPath);
-            }
-        } catch (KeeperException | InterruptedException e) {
-            throw e;
-        } finally {
-            //zkClient.deleteRecursive(transactionPath);
-            logger.info("afterConsumerSide end");
+    public void end() throws HeuristicRollbackException, RollbackException, HeuristicMixedException, SystemException {
+        if (DistributedTransactionSupport.isExecutable()
+                && !DistributedTransactionSupport.isConsumerSide() && DistributedTransactionSupport.getZNode() != null) {
+            new DistributedTransactionAop.TransactionThread(atomikosTransactionManager.getTransaction(), TransactionMessageAop.threadParam.get(), DistributedTransactionParams.COMMITED, zkClient, transactionMessageMapper).start();
+        } else {
+            atomikosTransactionManager.commit();
+            logger.debug(RpcContext.getContext().getLocalHost() + "提交事务");
+            TransactionMessageAop.paramsThreadLocal.set(DistributedTransactionParams.ROLL_BACK);
+            DistributedTransactionSupport.doRollback();
         }
     }
 
 
-    private CountDownLatch countDownLatch;
+    class TransactionThread extends Thread {
+        private Transaction transaction;
+        private Hashtable<String, Object> threadParam;
+        private DistributedTransactionParams param;
+        private ZkClient zkClient;
+        private TransactionMessageMapper transactionMessageMapper;
 
-    private long listenerTimeout = 300;
-    private TimeUnit timeUnit = TimeUnit.MILLISECONDS;
-
-    private String providerSideNode;
-
-    /**
-     * 生产者事务准备
-     *
-     * @param joinPoint
-     * @throws Exception
-     */
-    private void beforeProviderSide(ProceedingJoinPoint joinPoint) throws Throwable {
-        logger.info("begin");
-        String znode = RpcContext.getContext().getAttachment(DistributedTransactionParams.TRANSACTION_ZNODE.getValue());
-
-        if (znode == null) {
-            logger.info("znode null exit");
-            return;
+        public TransactionThread(Transaction transaction,
+                                 Hashtable<String, Object> threadParam,
+                                 DistributedTransactionParams param, ZkClient zkClient, TransactionMessageMapper transactionMessageMapper) {
+            this.transaction = transaction;
+            this.threadParam = threadParam;
+            this.param = param;
+            this.zkClient = zkClient;
+            this.transactionMessageMapper = transactionMessageMapper;
         }
 
-        String transactionPath = DistributedTransactionParams.ZK_PATH.getValue() + "/" + znode;
+        @Override
+        public void run() {
+            this.setName("TransactionThread");
+            String providerSideNode = String.valueOf(threadParam.get(TransactionMessageAop.CURRENT_ZNODE));
+            if (DistributedTransactionParams.ROLL_BACK.getValue().equals(param.getValue())) {
+                zkClient.writeData(providerSideNode, "0", -1);
+            } else if (DistributedTransactionParams.COMMITED.getValue().equals(param.getValue())) {
+                zkClient.writeData(providerSideNode, "1", -1);
 
-        boolean statRoot = zkClient.exists(DistributedTransactionParams.ZK_PATH.getValue());
-        if (!statRoot) {
-            zkClient.create(DistributedTransactionParams.ZK_PATH.getValue(), "", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-        }
-        //添加根节点监听
-        zkClient.subscribeDataChanges(transactionPath, new IZkDataListener() {
-            @Override
-            public void handleDataChange(String dataPath, Object data) throws Exception {
-                System.out.println("监听被触发了");
-                try {
-                    readWriteLock.writeLock().lock();
-                    isProcessed = true;
-                    if (countDownLatch != null) {
-                        countDownLatch.countDown();
-                    }
-                } finally {
-                    readWriteLock.writeLock().unlock();
-                    System.out.println("解锁成功");
-
-                }
             }
-
-            @Override
-            public void handleDataDeleted(String dataPath) throws Exception {
-                System.out.println(dataPath);
-            }
-        });
-        try {
-            String data = zkClient.readData(transactionPath, true);
-            if (data != null && "0".equals(data)) {
-                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-                throw new Throwable("事务回滚：" + znode);
-            }
-        } catch (Exception e) {
-        }
-
-
-        // zkNamespace
-        StringBuffer namespace = new StringBuffer();
-        // 获取本地IP地址
-        String ip = InetAddress.getLocalHost().getHostAddress();
-        // 获取当前方法所在的类
-        Object target = joinPoint.getTarget();
-        String clazzName = target.getClass().getName();
-
-        // 获取当前方法的名字
-        String methodName = joinPoint.getSignature().getName();
-        // 获取当前方法的所有参数
-        Object[] args = joinPoint.getArgs();
-        String paramsStr = "";
-        if (args != null && args.length > 0) {
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
-            objectOutputStream.writeObject(args);
-            byte[] params = byteArrayOutputStream.toByteArray();
-            paramsStr = EncryptUtil.encodeBase64(params);
-        }
-        // 将所持有参数转为二进制数据
-
-        // 拼接transaction znode namespace
-        namespace.append(ip)
-                .append(INTERVAL).append(System.currentTimeMillis())
-                .append(INTERVAL).append(clazzName)
-                .append(INTERVAL).append(methodName)
-                .append(INTERVAL).append(paramsStr);
-        String namespaceStr = URLEncoder.encode(namespace.toString(), "UTF-8");
-        // 创建事务节点
-        providerSideNode = zkClient.create(transactionPath + "/" + namespaceStr, "", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-        logger.info("beforeProviderSide success");
-
-    }
-
-    /**
-     * 生产者事务处理
-     *
-     * @param joinPoint
-     */
-    private void afterProviderSide(ProceedingJoinPoint joinPoint) throws Exception {
-        logger.info("start");
-        String znode = RpcContext.getContext().getAttachment(DistributedTransactionParams.TRANSACTION_ZNODE.getValue());
-
-        if (znode == null) {
-            logger.info("znode null exit");
-            return;
-        }
-
-        zkClient.writeData(providerSideNode, "1", -1);
-
-        if (!isProcessed) {
-            countDownLatch = new CountDownLatch(1);
+            ReentrantReadWriteLock readWriteLock = (ReentrantReadWriteLock) threadParam.get(TransactionMessageAop.LOCK);
+            CountDownLatch countDownLatch = (CountDownLatch) threadParam.get(TransactionMessageAop.COUNT_DOWN_LATCH);
             try {
                 logger.info("读锁打开");
                 readWriteLock.readLock().lock();
-                if (!isProcessed) {
-                    //
-                    countDownLatch.await(listenerTimeout, timeUnit);
+                if (countDownLatch.getCount() > 0) {
+                    countDownLatch.await(DistributedTransactionProviderSideAOP.listenerTimeout, DistributedTransactionProviderSideAOP.timeUnit);
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -394,39 +109,43 @@ public class DistributedTransactionAop {
                 readWriteLock.readLock().unlock();
                 logger.info("读锁关闭");
             }
-        }
-        countDownLatch = null;
 
-        String transactionPath = DistributedTransactionParams.ZK_PATH + "/" + znode;
-        String data = zkClient.readData(transactionPath);
-        if (data == null || "0".equals(data)) {
-            TransactionMessageAop.paramsThreadLocal.set(DistributedTransactionParams.ROLL_BACK);
-            throw new Exception("rollback " + providerSideNode);
-        } else {
-            TransactionMessageAop.paramsThreadLocal.set(DistributedTransactionParams.COMMITED);
-        }
-        logger.info("end");
-    }
+            String transactionPath = String.valueOf(threadParam.get(TransactionMessageAop.TRANSACTION_ZNODE_PATH));
 
-    class ConsumerSideTread extends Thread {
-        private ProceedingJoinPoint point;
-        private int count;
-        private CountDownLatch countDownLatch;
-
-        public ConsumerSideTread(ProceedingJoinPoint joinPoint, int count, CountDownLatch countDownLatch) {
-            this.point = joinPoint;
-            this.count = count;
-            this.countDownLatch = countDownLatch;
-        }
-
-        @Override
-        public void run() {
-            try {
-                afterConsumerSide(point, count);
-            } catch (Throwable throwable) {
-                logger.error("Transaction Listener Exception", throwable);
+            String data = zkClient.readData(transactionPath);
+            if (data == null || "0".equals(data)) {
+                try {
+                    transaction.rollback();
+                    return;
+                } catch (SystemException e) {
+                    TransactionMessage transactionMessage = transactionMessageMapper.selectByUUID(String.valueOf(threadParam.get(TransactionMessageAop.UUID_KEY)));
+                    transactionMessage.setStatus(TransactionMessageAop.ROLLBACK_STATUS);
+                    transactionMessageMapper.updateByPrimaryKey(transactionMessage);
+                    logger.debug("事务回滚");
+                    return;
+                }
             }
-            countDownLatch.countDown();
+            if (DistributedTransactionParams.ROLL_BACK.getValue().equals(param.getValue())) {
+                try {
+                    transaction.rollback();
+                } catch (SystemException e) {
+                    e.printStackTrace();
+                }
+                TransactionMessage transactionMessage = transactionMessageMapper.selectByUUID(String.valueOf(threadParam.get(TransactionMessageAop.UUID_KEY)));
+                transactionMessage.setStatus(TransactionMessageAop.ROLLBACK_STATUS);
+                transactionMessageMapper.updateByPrimaryKey(transactionMessage);
+                logger.debug("事务回滚");
+            } else if (DistributedTransactionParams.COMMITED.getValue().equals(param.getValue())) {
+                try {
+                    transaction.commit();
+                    TransactionMessage transactionMessage = transactionMessageMapper.selectByUUID(String.valueOf(threadParam.get(TransactionMessageAop.UUID_KEY)));
+                    transactionMessage.setStatus(TransactionMessageAop.COMMIT_STATUS);
+                    transactionMessageMapper.updateByPrimaryKey(transactionMessage);
+                    logger.debug("事务提交");
+                } catch (HeuristicMixedException | HeuristicRollbackException | RollbackException | SystemException e) {
+                    logger.error("try {} commit", threadParam.get(TransactionMessageAop.UUID_KEY));
+                }
+            }
         }
     }
 }

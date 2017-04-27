@@ -10,15 +10,14 @@ import java.util.Scanner;
  */
 public class TestAOP {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("classpath:spring-cloud.xml", "classpath:spring-data.xml");
         context.start();
-        Scanner scanner = new Scanner(System.in);
-        while (scanner.hasNext()) {
+        for (int i = 0; i < 20; i++) {
             TestTransaction testTransaction = context.getBean(TestTransaction.class);
-            scanner.next();
             new TestThread(testTransaction).start();
         }
+        Thread.sleep(50000);
     }
 
     static class TestThread extends Thread {

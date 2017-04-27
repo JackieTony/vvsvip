@@ -19,7 +19,7 @@ public class Application extends SpringBootServletInitializer implements Embedde
         return application.sources(Application.class);
     }
 
-    private static int port = 8080;
+    private static int port = 8082;
 
     public static void main(String[] args) throws Exception {
         Object[] sources = new Object[]{Application.class};

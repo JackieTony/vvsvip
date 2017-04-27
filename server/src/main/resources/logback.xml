@@ -82,13 +82,17 @@
         <appender-ref ref="CONSOLE"/> <!-- 标识这个appender将会添加到这个logger -->
     </root>
     <logger name="org.springframework" level="ERROR"/>
-    <logger name="org.springframework.remoting" level="WARN"/>
-    <logger name="org.springframework.scheduling.quartz" level="WARN"/>
-    <logger name="org.springframework.data.jpa" level="DEBUG"/>
+    <logger name="org.springframework.remoting" level="ERROR"/>
+    <logger name="org.springframework.scheduling.quartz" level="ERROR"/>
+    <logger name="org.springframework.data.jpa" level="ERROR"/>
+    <logger name="com.alibaba" level="ERROR"/>
     <logger name="org.cometd" level="WARN"/>
     <logger name="ch.qos.logback" level="WARN"/>
     <logger name="com.springapp.mvc" level="DEBUG"/>
     <logger name="com.atomikos" level="WARN">
         <appender-ref ref="ATOMIKOS_LOG"/>
     </logger>
+    <logger name="org.apache.zookeeper" level="ERROR"/>
+    <logger name="org.apache.zkclient" level="ERROR"/>
+
 </configuration>

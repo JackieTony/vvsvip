@@ -1,8 +1,13 @@
 package com.vvsvip.dubbo.impl;
 
 
+import com.vvsvip.core.dao.UserMapper;
+import com.vvsvip.core.model.User;
 import com.vvsvip.shop.test.service.IHelloWorldManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.security.SecureRandom;
 
 /**
  * Created by blues on 2017/4/19.
@@ -11,9 +16,17 @@ import org.springframework.transaction.annotation.Transactional;
 //@com.alibaba.dubbo.config.annotation.Service(loadbalance = "roundrobin")
 public class HelloWorldManager implements IHelloWorldManager {
 
+    @Autowired
+    private UserMapper userMapper;
+
+    private static int i = 0;
+
     @Override
-    @Transactional
     public void sayHelloWorld() {
+        User user = new User();
+        user.setUsername(new SecureRandom().nextInt() + "");
+        user.setPassword(i++ + "");
+        userMapper.insert(user);
         System.out.println("Hello dubbo");
     }
 }
