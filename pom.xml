@@ -13,6 +13,7 @@
         <module>dao</module>
         <module>service-interface</module>
         <module>test</module>
+        <module>cache-sync-canal</module>
     </modules>
 
 
