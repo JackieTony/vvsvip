@@ -114,7 +114,6 @@ public class DistributedTransactionConsumerSideAOP {
         }
     }
 
-    @Deprecated
     public Object doAround(final ProceedingJoinPoint joinPoint) throws Throwable {
 
         TransactionMessageAop.threadParam.get().put(TransactionMessageAop.IS_CONSUMER_SIDE, true);
@@ -243,6 +242,10 @@ public class DistributedTransactionConsumerSideAOP {
         Map<String, String> map = new HashMap<String, String>();
         listener:
         while (true) {
+            if (System.currentTimeMillis() - startTime > listenerTimeout) {
+                isSuccess = false;
+                break;
+            }
             // 事务节点
             List<String> childreList = zkClient.getChildren(transactionPath);
             if (childreList == null || childreList.size() != transactionCount) {
@@ -274,9 +277,6 @@ public class DistributedTransactionConsumerSideAOP {
             if (childreList.size() == transactionCount || !isSuccess) {
                 break;
             }
-            if (System.currentTimeMillis() - startTime > listenerTimeout) {
-                isSuccess = false;
-            }
             try {
                 Thread.sleep(50);
             } catch (InterruptedException e) {
@@ -294,6 +294,9 @@ public class DistributedTransactionConsumerSideAOP {
         long startTime = System.currentTimeMillis();
         listener:
         while (true) {
+            if (System.currentTimeMillis() - startTime > listenerTimeout) {
+                break;
+            }
             // 事务节点
             List<String> childreList = zkClient.getChildren(transactionPath);
             if (!isException) {
@@ -323,9 +326,6 @@ public class DistributedTransactionConsumerSideAOP {
                 break;
             }
             if ((!isException) && childreList.size() == transactionCount && okey) {
-                break;
-            }
-            if (System.currentTimeMillis() - startTime > listenerTimeout) {
                 break;
             }
             try {
