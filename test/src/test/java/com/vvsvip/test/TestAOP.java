@@ -1,6 +1,7 @@
 package com.vvsvip.test;
 
 import org.junit.Test;
+import org.omg.SendingContext.RunTime;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import java.util.Scanner;
@@ -13,11 +14,17 @@ public class TestAOP {
     public static void main(String[] args) throws InterruptedException {
         ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("classpath:spring-cloud.xml", "classpath:spring-data.xml");
         context.start();
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 40; i++) {
             TestTransaction testTransaction = context.getBean(TestTransaction.class);
             new TestThread(testTransaction).start();
         }
-        Thread.sleep(50000);
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+
+                System.out.println("hook running...");
+            }
+        }));
     }
 
     static class TestThread extends Thread {
@@ -29,7 +36,6 @@ public class TestAOP {
 
         @Test
         public void run() {
-
             try {
                 testTransaction.test();
             } catch (Exception e) {

@@ -1,6 +1,8 @@
 package com.vvsvip.common.tx;
 
 import com.alibaba.dubbo.rpc.RpcContext;
+import com.vvsvip.common.bean.TransactionMessage;
+import com.vvsvip.common.dao.TransactionMessageMapper;
 import com.vvsvip.common.security.EncryptUtil;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.I0Itec.zkclient.ZkClient;
@@ -54,16 +56,19 @@ public class DistributedTransactionProviderSideAOP {
      */
     private boolean isProcessed = false;
 
-    public void doAfterThrow() throws Exception {
+    /*
+    public void doAfterThrow() {
         providerSideNode = String.valueOf(TransactionMessageAop.threadParam.get().get(TransactionMessageAop.CURRENT_ZNODE));
         boolean stat = zkClient.exists(providerSideNode);
         if (stat) {
-            zkClient.writeData(providerSideNode, "0", -1);
+            zkClient.writeData(providerSideNode, "-1", -1);
         } else {
-            zkClient.create(providerSideNode, "0", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            zkClient.create(providerSideNode, "-1", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
         }
+        throw new RuntimeException("事务处理结束");
     }
-
+*/
+    
     public Object doAround(final ProceedingJoinPoint joinPoint) throws Throwable {
         logger.info("ProviderSide doAround begin");
         TransactionMessageAop.threadParam.get().put(TransactionMessageAop.IS_CONSUMER_SIDE, false);
@@ -71,11 +76,7 @@ public class DistributedTransactionProviderSideAOP {
         TransactionMessageAop.threadParam.get().put(TransactionMessageAop.TRANSACTION_ZNODE_PATH, znode);
 
         beforeProviderSide(joinPoint);
-
         Object object = joinPoint.proceed();
-
-        afterProviderSide(joinPoint);
-        logger.info("ProviderSide doAround success");
         return object;
     }
 
@@ -93,11 +94,6 @@ public class DistributedTransactionProviderSideAOP {
         }
         String transactionPath = znode;
 
-        boolean statRoot = zkClient.exists(DistributedTransactionParams.ZK_PATH.getValue());
-        if (!statRoot) {
-            zkClient.create(DistributedTransactionParams.ZK_PATH.getValue(), "", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-        }
-
         zkClient.setZkSerializer(new ZkSerializer() {
             @Override
             public byte[] serialize(Object data) throws ZkMarshallingError {
@@ -114,7 +110,7 @@ public class DistributedTransactionProviderSideAOP {
         zkClient.subscribeDataChanges(transactionPath, new IZkDataListener() {
             @Override
             public void handleDataChange(String dataPath, Object data) throws Exception {
-                System.out.println("监听被触发了");
+                System.out.println("监听器触发===========================" + data);
                 countDownLatch.countDown();
             }
 
@@ -125,7 +121,7 @@ public class DistributedTransactionProviderSideAOP {
         });
 
         String data = zkClient.readData(transactionPath, true);
-        if (data != null && "0".equals(data)) {
+        if (data != null && "-1".equals(data)) {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             throw new Throwable("事务回滚：" + znode);
         }
@@ -161,21 +157,12 @@ public class DistributedTransactionProviderSideAOP {
                 .append(INTERVAL).append(paramsStr);
         String namespaceStr = URLEncoder.encode(namespace.toString(), "UTF-8");
         // 创建事务节点
-        zkClient.create(transactionPath + "/" + namespaceStr, "", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        zkClient.create(transactionPath + "/" + namespaceStr, "-1", ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
         providerSideNode = transactionPath + "/" + namespaceStr;
+        TransactionMessageAop.threadParam.get().put(TransactionMessageAop.CURRENT_ZNODE, providerSideNode);
         logger.info("beforeProviderSide success");
         TransactionMessageAop.threadParam.get().put(TransactionMessageAop.COUNT_DOWN_LATCH, countDownLatch);
         TransactionMessageAop.threadParam.get().put(TransactionMessageAop.LOCK, readWriteLock);
         TransactionMessageAop.threadParam.get().put(TransactionMessageAop.CURRENT_ZNODE, transactionPath + "/" + namespaceStr);
     }
-
-    /**
-     * 生产者事务处理
-     *
-     * @param joinPoint
-     */
-    private void afterProviderSide(ProceedingJoinPoint joinPoint) throws Exception {
-
-    }
-
 }

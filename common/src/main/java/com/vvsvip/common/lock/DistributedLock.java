@@ -4,7 +4,6 @@ import com.vvsvip.common.tx.DistributedTransactionParams;
 import org.apache.zookeeper.*;
 import org.apache.zookeeper.data.Stat;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
@@ -18,7 +17,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class DistributedLock implements Lock, Watcher {
-    @Autowired
+
     private ZooKeeper zookeeper;
     //分布式锁根节点
     private String lockRoot = DistributedTransactionParams.ZK_LOCK.getValue();
@@ -33,8 +32,8 @@ public class DistributedLock implements Lock, Watcher {
     /**
      * 创建分布式锁,使用前请确认config配置的zookeeper服务可用
      */
-    public DistributedLock() {
-
+    public DistributedLock(ZooKeeper zookeeper) {
+        this.zookeeper = zookeeper;
     }
 
     @PostConstruct
@@ -54,7 +53,6 @@ public class DistributedLock implements Lock, Watcher {
         // 创建一个与服务器的连接
         try {
             zookeeper = new ZooKeeper(config, sessionTimeout, this);
-            System.out.println(zookeeper.getChildren("/dubbo", false));
             Stat stat = zookeeper.exists(lockRoot, false);
             if (stat == null) {
                 // 创建根节点

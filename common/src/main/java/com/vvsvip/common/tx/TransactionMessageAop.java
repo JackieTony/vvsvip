@@ -37,9 +37,10 @@ public class TransactionMessageAop {
     static final String LOCK = "READ_WRITE_LOCK";                              //当前线程的读写所
     static final String TRANSACTION_ZNODE_PATH = "TRANSACTION_ZNODE_PATH";     // 消费者事务节点
     static final String CURRENT_ZNODE = "CURRENT_ZNODE";                       //提供者节点
-    static final String COMMIT_STATUS = "1";
-    static final String ROLLBACK_STATUS = "-1";
-    static final String IS_DISTRIBUTED = "IS_DISTRIBUTED";
+    static final String COMMIT_STATUS = "1";                                   //当前事务已完成
+    static final String ROLLBACK_STATUS = "-1";                                //当前事务已回滚
+    static final String IS_DISTRIBUTED = "IS_DISTRIBUTED";                     //是分布式事务
+    static String TRANSACTION_COUNT = "TRANSACTION_COUNT";                     //分布式事务总个数
     @Autowired
     private TransactionMessageMapper transactionMessageMapper;
 
@@ -69,6 +70,7 @@ public class TransactionMessageAop {
         }
 
         if (exec && DistributedTransactionSupport.isDistributedTransaction() && !DistributedTransactionSupport.isConsumerSide()) {
+            RpcContext.getContext().getAttachment(DistributedTransactionParams.TRANSACTION_ZNODE.getValue());
             logger.debug("保存当前方法的参数");
             // zkNamespace
             StringBuffer namespace = new StringBuffer();

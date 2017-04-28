@@ -38,9 +38,11 @@ public class DistributedTransactionAop {
     }
 
     public void throwing() throws SystemException {
+        logger.info("进入throwing");
         if (DistributedTransactionSupport.isExecutable()
                 && !DistributedTransactionSupport.isConsumerSide() && DistributedTransactionSupport.getZNode() != null) {
-            new DistributedTransactionAop.TransactionThread(atomikosTransactionManager.getTransaction(), TransactionMessageAop.threadParam.get(), DistributedTransactionParams.COMMITED, zkClient, transactionMessageMapper).start();
+            new DistributedTransactionAop.TransactionThread(atomikosTransactionManager.getTransaction(),
+                    TransactionMessageAop.threadParam.get(), DistributedTransactionParams.ROLL_BACK, zkClient, transactionMessageMapper).start();
         } else {
             atomikosTransactionManager.rollback();
             logger.debug(RpcContext.getContext().getLocalHost() + "回滚事务");
@@ -56,9 +58,11 @@ public class DistributedTransactionAop {
     }
 
     public void end() throws HeuristicRollbackException, RollbackException, HeuristicMixedException, SystemException {
+        logger.info("进入END");
         if (DistributedTransactionSupport.isExecutable()
                 && !DistributedTransactionSupport.isConsumerSide() && DistributedTransactionSupport.getZNode() != null) {
-            new DistributedTransactionAop.TransactionThread(atomikosTransactionManager.getTransaction(), TransactionMessageAop.threadParam.get(), DistributedTransactionParams.COMMITED, zkClient, transactionMessageMapper).start();
+            new DistributedTransactionAop.TransactionThread(atomikosTransactionManager.getTransaction(),
+                    TransactionMessageAop.threadParam.get(), DistributedTransactionParams.COMMITED, zkClient, transactionMessageMapper).start();
         } else {
             atomikosTransactionManager.commit();
             logger.debug(RpcContext.getContext().getLocalHost() + "提交事务");
@@ -67,6 +71,10 @@ public class DistributedTransactionAop {
         }
     }
 
+    private void complate(ZkClient zkClient, String providerSideNode) {
+        zkClient.writeData(providerSideNode, "2", -1);
+        zkClient.close();
+    }
 
     class TransactionThread extends Thread {
         private Transaction transaction;
@@ -90,39 +98,40 @@ public class DistributedTransactionAop {
             this.setName("TransactionThread");
             String providerSideNode = String.valueOf(threadParam.get(TransactionMessageAop.CURRENT_ZNODE));
             if (DistributedTransactionParams.ROLL_BACK.getValue().equals(param.getValue())) {
-                zkClient.writeData(providerSideNode, "0", -1);
+                if (zkClient.exists(providerSideNode)) {
+                    zkClient.writeData(providerSideNode, TransactionMessageAop.ROLLBACK_STATUS, -1);
+                }
             } else if (DistributedTransactionParams.COMMITED.getValue().equals(param.getValue())) {
-                zkClient.writeData(providerSideNode, "1", -1);
-
+                zkClient.writeData(providerSideNode, TransactionMessageAop.COMMIT_STATUS, -1);
             }
-            ReentrantReadWriteLock readWriteLock = (ReentrantReadWriteLock) threadParam.get(TransactionMessageAop.LOCK);
             CountDownLatch countDownLatch = (CountDownLatch) threadParam.get(TransactionMessageAop.COUNT_DOWN_LATCH);
             try {
                 logger.info("读锁打开");
-                readWriteLock.readLock().lock();
                 if (countDownLatch.getCount() > 0) {
                     countDownLatch.await(DistributedTransactionProviderSideAOP.listenerTimeout, DistributedTransactionProviderSideAOP.timeUnit);
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } finally {
-                readWriteLock.readLock().unlock();
                 logger.info("读锁关闭");
             }
 
             String transactionPath = String.valueOf(threadParam.get(TransactionMessageAop.TRANSACTION_ZNODE_PATH));
-
+            logger.error("===============================" + transactionPath + "============================");
             String data = zkClient.readData(transactionPath);
-            if (data == null || "0".equals(data)) {
+            if (data == null || TransactionMessageAop.ROLLBACK_STATUS.equals(data)) {
                 try {
+                    logger.debug("事务回滚");
                     transaction.rollback();
-                    return;
+                    throw new RuntimeException("事务回滚");
                 } catch (SystemException e) {
+                    e.printStackTrace();
+                } finally {
                     TransactionMessage transactionMessage = transactionMessageMapper.selectByUUID(String.valueOf(threadParam.get(TransactionMessageAop.UUID_KEY)));
                     transactionMessage.setStatus(TransactionMessageAop.ROLLBACK_STATUS);
                     transactionMessageMapper.updateByPrimaryKey(transactionMessage);
-                    logger.debug("事务回滚");
-                    return;
+
+                    complate(zkClient, providerSideNode);
                 }
             }
             if (DistributedTransactionParams.ROLL_BACK.getValue().equals(param.getValue())) {
@@ -130,11 +139,14 @@ public class DistributedTransactionAop {
                     transaction.rollback();
                 } catch (SystemException e) {
                     e.printStackTrace();
+                } finally {
+                    TransactionMessage transactionMessage = transactionMessageMapper.selectByUUID(String.valueOf(threadParam.get(TransactionMessageAop.UUID_KEY)));
+                    transactionMessage.setStatus(TransactionMessageAop.ROLLBACK_STATUS);
+                    transactionMessageMapper.updateByPrimaryKey(transactionMessage);
+                    logger.debug("事务回滚");
+
+                    complate(zkClient, providerSideNode);
                 }
-                TransactionMessage transactionMessage = transactionMessageMapper.selectByUUID(String.valueOf(threadParam.get(TransactionMessageAop.UUID_KEY)));
-                transactionMessage.setStatus(TransactionMessageAop.ROLLBACK_STATUS);
-                transactionMessageMapper.updateByPrimaryKey(transactionMessage);
-                logger.debug("事务回滚");
             } else if (DistributedTransactionParams.COMMITED.getValue().equals(param.getValue())) {
                 try {
                     transaction.commit();
@@ -144,6 +156,8 @@ public class DistributedTransactionAop {
                     logger.debug("事务提交");
                 } catch (HeuristicMixedException | HeuristicRollbackException | RollbackException | SystemException e) {
                     logger.error("try {} commit", threadParam.get(TransactionMessageAop.UUID_KEY));
+                } finally {
+                    complate(zkClient, providerSideNode);
                 }
             }
         }

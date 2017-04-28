@@ -146,27 +146,45 @@
             </list>
         </constructor-arg>
     </bean>
-    <bean id="zkClient" class="org.I0Itec.zkclient.ZkClient" scope="prototype">
-        <constructor-arg name="zkServers" value="192.168.214.100:2181,192.168.214.101:2181"/>
-        <constructor-arg name="sessionTimeout" value="3000000"/>
-        <constructor-arg name="connectionTimeout" value="3000000"/>
+
+
+    <bean id="distributedLock" class="com.vvsvip.common.lock.DistributedLock">
+        <constructor-arg name="zookeeper">
+            <bean class="org.apache.zookeeper.ZooKeeper">
+                <constructor-arg name="connectString" value="192.168.214.100:2181,192.168.214.101:2181"/>
+                <constructor-arg name="sessionTimeout" value="5000"/>
+                <constructor-arg name="watcher">
+                    <bean class="com.vvsvip.common.lock.DefaultWatcher"></bean>
+                </constructor-arg>
+            </bean>
+        </constructor-arg>
     </bean>
 
+    <bean id="zkClient" class="org.I0Itec.zkclient.ZkClient" scope="prototype">
+        <constructor-arg name="zkServers" value="192.168.214.100:2181,192.168.214.101:2181"/>
+        <constructor-arg name="sessionTimeout" value="5000"/>
+        <constructor-arg name="connectionTimeout" value="5000"/>
+    </bean>
     <bean id="distributedTransactionProviderSideAOP" class="com.vvsvip.common.tx.DistributedTransactionProviderSideAOP"
           scope="prototype"/>
     <bean id="distributedTransactionAOP" class="com.vvsvip.common.tx.DistributedTransactionAop" scope="prototype"/>
     <bean id="transactionMessageAopBean" class="com.vvsvip.common.tx.TransactionMessageAop" scope="prototype"/>
     <aop:config>
         <aop:pointcut id="transactionPointcut" expression="execution(public * com.vvsvip.dubbo..pay*(..))"/>
+        <!-- zookeeper事务状态监测 -->
         <aop:aspect id="distributedTransactionProviderSideAOP" ref="distributedTransactionProviderSideAOP" order="6">
             <aop:around pointcut-ref="transactionPointcut" method="doAround"/>
-            <aop:after-throwing pointcut-ref="transactionPointcut" method="doAfterThrow"/>
+            <!--
+                <aop:after-throwing pointcut-ref="transactionPointcut" method="doAfterThrow"/>
+            -->
         </aop:aspect>
+        <!-- 本地事务 -->
         <aop:aspect id="distributedTransactionAOP" ref="distributedTransactionAOP" order="5">
             <aop:around method="around" pointcut-ref="transactionPointcut"/>
             <aop:after-throwing method="throwing" pointcut-ref="transactionPointcut"/>
         </aop:aspect>
-        <aop:aspect id="transactionMessageAop" ref="transactionMessageAopBean" order="4">
+        <!-- 记录消息体-->
+        <aop:aspect id="transactionMessageAop" ref="transactionMessageAopBean" order="3">
             <aop:around pointcut-ref="transactionPointcut" method="around"/>
         </aop:aspect>
     </aop:config>
