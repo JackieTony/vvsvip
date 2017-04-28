@@ -75,5 +75,5 @@
     <logger name="org.cometd" level="WARN"/>
     <logger name="ch.qos.logback" level="WARN"/>
     <logger name="com.springapp.mvc" level="DEBUG"/>
-    <logger name="org.apache.zookeeper.ClientCnxn" level="ERROR"/>
+    <logger name="org.apache.zookeeper" level="ERROR"/>
 </configuration>
